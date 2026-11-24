@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: shellcheck firewall/*.sh scripts/*.sh deploy/*.sh
+      - name: Validate compose file
+        working-directory: compose
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only/' .env
+          docker compose config --quiet

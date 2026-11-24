@@ -1,0 +1,75 @@
+# One public entry point, everything else private.
+#
+#   internet ──443──> caddy (TLS, headers) ──edge network──> app ──data network──> postgres
+#                                                               adminer ─┘ (127.0.0.1 only)
+#
+# Only Caddy publishes ports. The app and database have no `ports:` at all, and the
+# database sits on an `internal` network with no route to the internet.
+# Adminer is bound to 127.0.0.1 and reached through an SSH tunnel (see README).
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    networks: [edge]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+
+  app:
+    # Stand-in for your application. Replace with your own image.
+    image: traefik/whoami:v1.10
+    restart: unless-stopped
+    networks: [edge, data]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@postgres:5432/app
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [data]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer:4.8.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080" # never 0.0.0.0
+    networks: [data]
+    profiles: [admin] # only runs with: docker compose --profile admin up -d
+
+networks:
+  edge: {}
+  data:
+    internal: true # no outbound internet for the database
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  pg_data: {}
