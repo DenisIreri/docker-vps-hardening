@@ -1,5 +1,7 @@
 # Docker VPS hardening template
 
+![Layout: internet through a UFW and DOCKER-USER firewall to Caddy and the apps, Postgres on an internal network, the admin panel on 127.0.0.1 only, and deploys with a health check and rollback](docs/thumbnail.png)
+
 A small, opinionated baseline for running several web apps on one Linux VPS with
 Docker, without leaving databases and admin panels open to the internet.
 
